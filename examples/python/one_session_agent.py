@@ -5,7 +5,7 @@ from nixl import nixl_agent, nixl_agent_config
 from nixl.logging import get_logger
 import time
 import gc
-
+import random
 
 logger = get_logger(__name__)
 
@@ -46,7 +46,7 @@ def setup_agent(args):
 
     return agent
 
-def setup_memory(args, agent: nixl_agent, dims: tuple, dtype: torch.dtype) -> Tuple[torch.tensor, Any]:
+def setup_memory(args, agent: nixl_agent, dims: tuple, dtype: torch.dtype) -> Tuple[torch.Tensor, Any]:
     '''
         setsup memory, returns tensors and its registers
     '''
@@ -59,18 +59,18 @@ def setup_memory(args, agent: nixl_agent, dims: tuple, dtype: torch.dtype) -> Tu
     if args.mode == TARG:
         init_f = torch.ones
     
-    tensor = init_f(dims, dtype=dtype)
+    tensor: torch.Tensor = init_f(dims, dtype=dtype)
     reg_descs = agent.register_memory(tensor)
     if not reg_descs:
         raise RuntimeError("Couldn't register memory")
     
     return tensor, reg_descs
 
-def get_dims(iteration) -> Tuple:
-    return [256 * (2 ** (iteration)), 16]
+def get_dims(mi) -> Tuple:
+    return [256 * (2 ** (mi)), 16]
 
 
-def run_server(args, iteration: int):
+def run_server(args, mi: int, agent: nixl_agent = None, row_ids = None, iterations: int = 1):
     """
         selects rows
         creates local xfer descs
@@ -86,13 +86,19 @@ def run_server(args, iteration: int):
         returns timing
 
     """
-    dims = get_dims(iteration)
-    agent = setup_agent(args)
+    if agent is None:
+        agent = setup_agent(args)
+
+    dims = get_dims(mi)
     tensor, reg_descs = setup_memory(args, agent, dims, dtype)
     logger.info("setup server")
 
     # doing it before waiting for other agent, so to not waste time 
-    rows = [tensor]
+    if row_ids is None:
+        row_ids = [0]
+        rows = [tensor]
+    else:
+        rows = [tensor[i] for i in row_ids]
     descs = agent.get_xfer_descs(rows)
     serialized_descs = agent.get_serialized_descs(descs)
     logger.info("serialized descs")
@@ -102,13 +108,14 @@ def run_server(args, iteration: int):
 
     agent.send_notif(INIT, serialized_descs)
     
-    logger.info("waiting for read to fini9sh")
+    logger.info("waiting for read to finish")
     # wait for data to be pulled down
-    expected_message = get_message(True, 0)
-    while True:
-        messages = agent.get_new_notifs()
-        if INIT in messages and expected_message.encode() in messages[INIT]:
-            break
+    for i in range(iterations):
+        expected_message = get_message(len(row_ids) == 1, i)
+        while True:
+            messages = agent.get_new_notifs()
+            if INIT in messages and expected_message.encode() in messages[INIT]:
+                break
         
     logger.info("waiting for client to finish")
     # Wait for the other agent to drop off
@@ -129,7 +136,7 @@ def run_server(args, iteration: int):
 
 
 
-def run_client(args, iteration: int):
+def run_client(args, mi: int, agent: nixl_agent = None, row_ids = None, iterations: int = 1, sample_size: int = 1000):
     """
         sends metadata to server
         pulls for server metadata info
@@ -138,7 +145,7 @@ def run_client(args, iteration: int):
         desc target descs
         create local rows
         create local xfer descs
-        if doing one_call:
+        if len(row_ids) == 1:
             initialize xfer:
                 op,
                 local xfer descs,
@@ -176,9 +183,10 @@ def run_client(args, iteration: int):
         return timing
     """
 
-    
-    dims = get_dims(iteration)
-    agent = setup_agent(args)
+    if agent is None:    
+        agent = setup_agent(args)
+
+    dims = get_dims(mi)
     tensor, reg_descs = setup_memory(args, agent, dims, dtype)
     
     logger.info("client got data and descs")
@@ -188,7 +196,11 @@ def run_client(args, iteration: int):
     agent.fetch_remote_metadata(TARG, args.ip, args.port)
 
     # create local information before polling not to waste time
-    rows = [tensor] 
+    if row_ids is None:
+        row_ids = [0]
+        rows = [tensor]
+    else:
+        rows = [tensor[i] for i in row_ids]
     local_desc = agent.get_xfer_descs(rows)
 
     
@@ -206,26 +218,51 @@ def run_client(args, iteration: int):
 
     target_descs = agent.deserialize_descs(messages[TARG][0])
 
-    expected_message = get_message(True, 0)
-    handle = agent.initialize_xfer(
-        "READ", local_desc, target_descs, TARG, expected_message.encode()
-    )
-
-    logger.info("sending in READ request")
-
-    status = agent.transfer(handle)
-    if status == "ERR":
-        raise RuntimeError("transfer errored out")
+    number_of_calls = len(row_ids)
+    if number_of_calls != 1:
+        local_dlist = agent.prep_xfer_dlist("", local_desc)
+        target_dlist = agent.prep_xfer_dlist(TARG, target_descs)
     
-    logger.info("waiting for read result")
-    while status!=DONE:
-        status = agent.check_xfer_state(handle)
+    handles = []
+    results = []
+    for i in range(iterations):
+        expected_message = get_message(number_of_calls == 1, i)
+        if number_of_calls == 1:
+            handle = agent.initialize_xfer(
+                "READ", local_desc, target_descs, TARG, expected_message.encode()
+            )
+        else:
+            sampled_ids = random.sample(row_ids, sample_size)
+            handle = agent.make_prepped_xfer(
+                "READ",
+                local_dlist,
+                sampled_ids,
+                target_dlist,
+                sampled_ids,
+                expected_message.encode()
+            )
+        handles += [handle]
+
+
+        logger.info("sending in READ request")
+
+        t0 = time.perf_counter()
+        status = agent.transfer(handle)
         if status == "ERR":
             raise RuntimeError("transfer errored out")
-    
+        
+        logger.info("waiting for read result")
+        while status!=DONE:
+            status = agent.check_xfer_state(handle)
+            if status == "ERR":
+                raise RuntimeError("transfer errored out")
+        results += [(time.perf_counter()-t0) * 1000] 
+        logger.info(f"finished transfer in: {results[-1]} ms for {expected_message}")
+
     # Read is done
     logger.info("cleaning up")
-    agent.release_xfer_handle(handle)
+    for handle in handles:
+        agent.release_xfer_handle(handle)
     agent.deregister_memory(reg_descs)
     # Invalidate so that the other agent knows we are off, should be done at the end so we leave everything else first
     del tensor
@@ -233,16 +270,26 @@ def run_client(args, iteration: int):
     agent.invalidate_local_metadata(args.ip, args.port)
     del agent
 
-    return 
+    return results
 
 
 if __name__ == "__main__":
     args = parse_args()
+    
+    # agent = setup_agent(args)
+    agent = None
+    mi = 22
+    iteration = 100
+    dims = get_dims(mi)
+    row_ids = [i for i in range(min(dims[0], 100000))]
+
 
     if args.mode == TARG:
-        run_server(args, 15)
+        run_server(args, mi, agent, row_ids, iteration)
     else:
-        run_client(args, 15)
+        res = run_client(args, mi, agent, row_ids, iteration, 10)
+        logger.info(f"avg call time: {sum(res) / len(res)}")
+        
     
 
 
