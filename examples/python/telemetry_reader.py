@@ -33,7 +33,8 @@ logging.basicConfig(
 logger = logging.getLogger(__name__)
 
 # Constants from telemetry_event.h
-TELEMETRY_VERSION = 4
+TELEMETRY_VERSION = 5
+CACHE_LINE_SIZE = 64
 
 # NIXL telemetry event types (nixl_telemetry_event_type_t)
 AGENT_TX_BYTES = 0
@@ -86,12 +87,14 @@ class BufferHeader(ctypes.Structure):
 
     _pack_ = 1
     _fields_ = [
-        ("write_pos", ctypes.c_size_t),
-        ("read_pos", ctypes.c_size_t),
-        ("version", ctypes.c_uint32),
-        ("expected_version", ctypes.c_uint32),
-        ("capacity", ctypes.c_size_t),
-        ("mask", ctypes.c_size_t),
+        ("write_pos", ctypes.c_size_t), # offset at 0 + ends at 8 = 8
+        ("_pad_write", ctypes.c_char * (CACHE_LINE_SIZE - ctypes.sizeof(ctypes.c_size_t))), # pad until next line
+        ("read_pos", ctypes.c_size_t), # offset at 64 + ends at 8 = 72
+        ("version", ctypes.c_uint32), # offset at 72 + ends at 4 = 76
+        ("expected_version", ctypes.c_uint32), # offset at 76 + ends at 4 = 80
+        ("capacity", ctypes.c_size_t), # offset at 80 + ends at 8 = 88
+        ("mask", ctypes.c_size_t), # offset at 88 + 8 = 96
+        ("_pad_tail", ctypes.c_char * 32) # offset at 96, compiler pads for 128, 32 padding
     ]
 
 
