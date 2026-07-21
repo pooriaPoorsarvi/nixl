@@ -52,8 +52,11 @@ sharedRingBuffer<T>::push(const T &item) {
     size_t write_pos = header_->write_pos.load(std::memory_order_relaxed);
     size_t next_write = (write_pos + 1) & header_->mask;
 
-    if (next_write == header_->read_pos.load(std::memory_order_acquire))
-        return false; // Buffer full
+    if (next_write == cached_read_pos_) {
+        cached_read_pos_ = header_->read_pos.load(std::memory_order_acquire);
+        if (next_write == cached_read_pos_)
+            return false; // Buffer full
+    }
 
     data_[write_pos] = item;
 
@@ -66,7 +69,10 @@ bool
 sharedRingBuffer<T>::pop(T &item) {
     size_t read_pos = header_->read_pos.load(std::memory_order_relaxed);
 
-    if (read_pos == header_->write_pos.load(std::memory_order_acquire)) return false;
+    if (read_pos == cached_write_pos_) {
+        cached_write_pos_ = header_->write_pos.load(std::memory_order_acquire);
+        if (read_pos == cached_write_pos_) return false;
+    }
 
     // Read data
     item = data_[read_pos];
