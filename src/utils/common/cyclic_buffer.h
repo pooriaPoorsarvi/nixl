@@ -72,6 +72,8 @@ private:
     bufferHeader *header_;
     T *data_;
     size_t bufferSize_;
+    size_t cached_write_pos_ = 0;
+    size_t cached_read_pos_ = 0;
 };
 
 #include "cyclic_buffer.tpp"
