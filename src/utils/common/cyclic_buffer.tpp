@@ -1,5 +1,5 @@
 /*
- * SPDX-FileCopyrightText: Copyright (c) 2025 NVIDIA CORPORATION & AFFILIATES. All rights reserved.
+ * SPDX-FileCopyrightText: Copyright (c) 2025-2026 NVIDIA CORPORATION & AFFILIATES. All rights reserved.
  * SPDX-License-Identifier: Apache-2.0
  *
  * Licensed under the Apache License, Version 2.0 (the "License");
@@ -259,6 +259,10 @@ sharedRingBuffer<T>::openCyclicBuffer(const std::string &name, int version) {
 
     header_ = static_cast<bufferHeader *>(ptr);
     data_ = reinterpret_cast<T *>(static_cast<char *>(ptr) + sizeof(bufferHeader));
+
+    // When attaching to an existing buffer, cached values need to be seeded
+    cached_write_pos_ = header_->write_pos.load(std::memory_order_acquire);
+    cached_read_pos_ = header_->read_pos.load(std::memory_order_acquire);
 }
 
 template class sharedRingBuffer<uint8_t>;
