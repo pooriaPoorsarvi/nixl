@@ -87,14 +87,17 @@ class BufferHeader(ctypes.Structure):
 
     _pack_ = 1
     _fields_ = [
-        ("write_pos", ctypes.c_size_t), # offset at 0 + ends at 8 = 8
-        ("_pad_write", ctypes.c_char * (CACHE_LINE_SIZE - ctypes.sizeof(ctypes.c_size_t))), # pad until next line
-        ("read_pos", ctypes.c_size_t), # offset at 64 + ends at 8 = 72
-        ("version", ctypes.c_uint32), # offset at 72 + ends at 4 = 76
-        ("expected_version", ctypes.c_uint32), # offset at 76 + ends at 4 = 80
-        ("capacity", ctypes.c_size_t), # offset at 80 + ends at 8 = 88
-        ("mask", ctypes.c_size_t), # offset at 88 + 8 = 96
-        ("_pad_tail", ctypes.c_char * 32) # offset at 96, compiler pads for 128, 32 padding
+        ("write_pos", ctypes.c_size_t),  # [0, 8)
+        (
+            "_pad_write",
+            ctypes.c_char * (CACHE_LINE_SIZE - ctypes.sizeof(ctypes.c_size_t)),
+        ),  # pad write_pos to its own cache line: [8, 64)
+        ("read_pos", ctypes.c_size_t),  # [64, 72)
+        ("version", ctypes.c_uint32),  # [72, 76)
+        ("expected_version", ctypes.c_uint32),  # [76, 80)
+        ("capacity", ctypes.c_size_t),  # [80, 88)
+        ("mask", ctypes.c_size_t),  # [88, 96)
+        ("_pad_tail", ctypes.c_char * 32),  # match C++ compiler's tail padding: [96, 128)
     ]
 
 
@@ -113,6 +116,9 @@ class SharedRingBuffer:
 
         self._open_file()
         self._map_memory()
+
+        # Seed the cached position on attaching to an existing buffer
+        self.cached_write_pos = self.header.write_pos
 
     def _open_file(self):
         """Open existing file"""
