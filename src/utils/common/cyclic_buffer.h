@@ -50,7 +50,8 @@ public:
     capacity() const;
 
 private:
-    // Hardcoded value instead of std::hardware_destructive_interference_size due to ABI, needs to be consistent across build and compilers.
+    // Hardcoded value instead of std::hardware_destructive_interference_size due to ABI;
+    // needs to be consistent across build and compilers.
     static constexpr size_t CACHE_LINE_SIZE = 64;
     struct bufferHeader {
         alignas(CACHE_LINE_SIZE) std::atomic<size_t> write_pos{0};

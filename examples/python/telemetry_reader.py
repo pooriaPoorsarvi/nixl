@@ -97,7 +97,10 @@ class BufferHeader(ctypes.Structure):
         ("expected_version", ctypes.c_uint32),  # [76, 80)
         ("capacity", ctypes.c_size_t),  # [80, 88)
         ("mask", ctypes.c_size_t),  # [88, 96)
-        ("_pad_tail", ctypes.c_char * 32),  # match C++ compiler's tail padding: [96, 128)
+        (
+            "_pad_tail",
+            ctypes.c_char * 32,
+        ),  # match C++ compiler's tail padding: [96, 128)
     ]
 
 
