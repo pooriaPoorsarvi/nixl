@@ -50,9 +50,10 @@ public:
     capacity() const;
 
 private:
+    static constexpr size_t CACHE_LINE_SIZE = 64;
     struct bufferHeader {
-        std::atomic<size_t> write_pos{0};
-        std::atomic<size_t> read_pos{0};
+        alignas(CACHE_LINE_SIZE) std::atomic<size_t> write_pos{0};
+        alignas(CACHE_LINE_SIZE) std::atomic<size_t> read_pos{0};
         std::atomic<int> version{0};
         int expected_version{0};
         const size_t capacity;

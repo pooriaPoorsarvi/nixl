@@ -120,6 +120,7 @@ sharedRingBuffer<T>::bufferHeader::bufferHeader(size_t size) : capacity(size), m
 
     static_assert(std::is_trivially_copyable<T>::value,
                   "T must be trivially copyable for shared memory");
+    static_assert(sizeof(bufferHeader) == 2 * CACHE_LINE_SIZE, "bufferHeader layout changed.");
 }
 
 template<typename T>
