@@ -54,6 +54,7 @@ private:
     // needs to be consistent across build and compilers.
     // Conservatively set to 256 similar to GCC std::hardware_destructive_interference_size for ARM.
     static constexpr size_t DESTRUCTIVE_INTERFERENCE_SIZE = 256;
+
     struct bufferHeader {
         alignas(DESTRUCTIVE_INTERFERENCE_SIZE) std::atomic<size_t> write_pos{0};
         alignas(DESTRUCTIVE_INTERFERENCE_SIZE) std::atomic<size_t> read_pos{0};
