@@ -90,7 +90,8 @@ class BufferHeader(ctypes.Structure):
         ("write_pos", ctypes.c_size_t),  # [0, 8)
         (
             "_pad_write",
-            ctypes.c_char * (DESTRUCTIVE_INTERFERENCE_SIZE - ctypes.sizeof(ctypes.c_size_t)),
+            ctypes.c_char
+            * (DESTRUCTIVE_INTERFERENCE_SIZE - ctypes.sizeof(ctypes.c_size_t)),
         ),  # pad write_pos to its own cache line: [8, 256)
         ("read_pos", ctypes.c_size_t),  # [256,264)
         ("version", ctypes.c_uint32),  # [264,268)
