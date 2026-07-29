@@ -53,10 +53,10 @@ private:
     // Hardcoded value instead of std::hardware_destructive_interference_size due to ABI;
     // needs to be consistent across build and compilers.
     // Conservatively set to 256 similar to GCC std::hardware_destructive_interference_size for ARM.
-    static constexpr size_t CACHE_LINE_SIZE = 256;
+    static constexpr size_t DESTRUCTIVE_INTERFERENCE_SIZE = 256;
     struct bufferHeader {
-        alignas(CACHE_LINE_SIZE) std::atomic<size_t> write_pos{0};
-        alignas(CACHE_LINE_SIZE) std::atomic<size_t> read_pos{0};
+        alignas(DESTRUCTIVE_INTERFERENCE_SIZE) std::atomic<size_t> write_pos{0};
+        alignas(DESTRUCTIVE_INTERFERENCE_SIZE) std::atomic<size_t> read_pos{0};
         std::atomic<int> version{0};
         int expected_version{0};
         const size_t capacity;
