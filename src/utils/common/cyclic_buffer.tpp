@@ -50,8 +50,9 @@ template<typename T>
 bool
 sharedRingBuffer<T>::push(const T &item) {
     size_t write_pos = header_->write_pos.load(std::memory_order_relaxed);
-    size_t next_write = (write_pos + 1) & header_->mask;
+    size_t next_write = (write_pos + 1) & cached_mask_;
 
+    // full() not called as it causes cache miss
     if (next_write == cached_read_pos_) {
         cached_read_pos_ = header_->read_pos.load(std::memory_order_acquire);
         if (next_write == cached_read_pos_)
@@ -69,6 +70,7 @@ bool
 sharedRingBuffer<T>::pop(T &item) {
     size_t read_pos = header_->read_pos.load(std::memory_order_relaxed);
 
+    // empty() not called as it causes cache miss
     if (read_pos == cached_write_pos_) {
         cached_write_pos_ = header_->write_pos.load(std::memory_order_acquire);
         if (read_pos == cached_write_pos_) return false;
@@ -78,7 +80,7 @@ sharedRingBuffer<T>::pop(T &item) {
     item = data_[read_pos];
 
     // Update read position
-    size_t next_read = (read_pos + 1) & header_->mask;
+    size_t next_read = (read_pos + 1) & cached_mask_;
     header_->read_pos.store(next_read, std::memory_order_release);
     return true;
 }
@@ -177,6 +179,8 @@ sharedRingBuffer<T>::createCyclicBuffer(const std::string &name, int version) {
     new (header_) bufferHeader(bufferSize_);
     header_->version.store(version, std::memory_order_release);
     header_->expected_version = version;
+
+    cached_mask_ = header_->mask;
 }
 
 template<typename T>
@@ -263,6 +267,7 @@ sharedRingBuffer<T>::openCyclicBuffer(const std::string &name, int version) {
     // When attaching to an existing buffer, cached values need to be seeded
     cached_write_pos_ = header_->write_pos.load(std::memory_order_acquire);
     cached_read_pos_ = header_->read_pos.load(std::memory_order_acquire);
+    cached_mask_ = header_->mask;
 }
 
 template class sharedRingBuffer<uint8_t>;

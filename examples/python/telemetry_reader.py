@@ -34,7 +34,7 @@ logger = logging.getLogger(__name__)
 
 # Constants from telemetry_event.h
 TELEMETRY_VERSION = 5
-CACHE_LINE_SIZE = 64
+CACHE_LINE_SIZE = 256
 
 # NIXL telemetry event types (nixl_telemetry_event_type_t)
 AGENT_TX_BYTES = 0
@@ -91,16 +91,16 @@ class BufferHeader(ctypes.Structure):
         (
             "_pad_write",
             ctypes.c_char * (CACHE_LINE_SIZE - ctypes.sizeof(ctypes.c_size_t)),
-        ),  # pad write_pos to its own cache line: [8, 64)
-        ("read_pos", ctypes.c_size_t),  # [64, 72)
-        ("version", ctypes.c_uint32),  # [72, 76)
-        ("expected_version", ctypes.c_uint32),  # [76, 80)
-        ("capacity", ctypes.c_size_t),  # [80, 88)
-        ("mask", ctypes.c_size_t),  # [88, 96)
+        ),  # pad write_pos to its own cache line: [8, 256)
+        ("read_pos", ctypes.c_size_t),  # [256,264)
+        ("version", ctypes.c_uint32),  # [264,268)
+        ("expected_version", ctypes.c_uint32),  # [268,272)
+        ("capacity", ctypes.c_size_t),  # [272,280)
+        ("mask", ctypes.c_size_t),  # [280,288)
         (
             "_pad_tail",
-            ctypes.c_char * 32,
-        ),  # match C++ compiler's tail padding: [96, 128)
+            ctypes.c_char * 224,
+        ),  # match C++ compiler's tail padding: [288, 512)
     ]
 
 
@@ -116,12 +116,14 @@ class SharedRingBuffer:
         self.data = None
         self.buffer_size = None
         self.cached_write_pos = 0
+        self.cached_mask = 0
 
         self._open_file()
         self._map_memory()
 
-        # Seed the cached position on attaching to an existing buffer
+        # Seed the cached positions on attaching to an existing buffer
         self.cached_write_pos = self.header.write_pos
+        self.cached_mask = self.header.mask
 
     def _open_file(self):
         """Open existing file"""
@@ -208,7 +210,7 @@ class SharedRingBuffer:
 
         event = self.data[read_pos]
 
-        next_read = (read_pos + 1) & self.header.mask
+        next_read = (read_pos + 1) & self.cached_mask
         self.header.read_pos = next_read
 
         return event

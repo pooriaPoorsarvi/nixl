@@ -52,14 +52,15 @@ public:
 private:
     // Hardcoded value instead of std::hardware_destructive_interference_size due to ABI;
     // needs to be consistent across build and compilers.
-    static constexpr size_t CACHE_LINE_SIZE = 64;
+    // Conservatively set to 256 similar to GCC std::hardware_destructive_interference_size for ARM.
+    static constexpr size_t CACHE_LINE_SIZE = 256;
     struct bufferHeader {
         alignas(CACHE_LINE_SIZE) std::atomic<size_t> write_pos{0};
         alignas(CACHE_LINE_SIZE) std::atomic<size_t> read_pos{0};
         std::atomic<int> version{0};
         int expected_version{0};
         const size_t capacity;
-        size_t mask;
+        const size_t mask;
 
         bufferHeader(size_t size);
     };
@@ -76,6 +77,7 @@ private:
     size_t bufferSize_;
     size_t cached_write_pos_ = 0;
     size_t cached_read_pos_ = 0;
+    size_t cached_mask_ = 0;
 };
 
 #include "cyclic_buffer.tpp"
