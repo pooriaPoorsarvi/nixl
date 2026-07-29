@@ -55,7 +55,7 @@ sharedRingBuffer<T>::push(const T &item) {
     // full() not called as it causes cache miss
     if (next_write == cachedReadPos_) {
         cachedReadPos_ = header_->read_pos.load(std::memory_order_acquire);
-        if (next_write == cachedReadPos_){
+        if (next_write == cachedReadPos_) {
             return false; // Buffer full
         }
     }
@@ -74,7 +74,7 @@ sharedRingBuffer<T>::pop(T &item) {
     // empty() not called as it causes cache miss
     if (read_pos == cachedWritePos_) {
         cachedWritePos_ = header_->write_pos.load(std::memory_order_acquire);
-        if (read_pos == cachedWritePos_){
+        if (read_pos == cachedWritePos_) {
             return false;
         }
     }
@@ -131,7 +131,7 @@ sharedRingBuffer<T>::bufferHeader::bufferHeader(size_t size) : capacity(size), m
 
     static_assert(std::is_trivially_copyable<T>::value,
                   "T must be trivially copyable for shared memory");
-    static_assert(sizeof(bufferHeader) == 2 * DESTRUCTIVE_INTERFERENCE_SIZE, 
+    static_assert(sizeof(bufferHeader) == 2 * DESTRUCTIVE_INTERFERENCE_SIZE,
                   "bufferHeader layout changed.");
 }
 
