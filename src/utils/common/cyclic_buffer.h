@@ -73,6 +73,8 @@ private:
     void
     openCyclicBuffer(const std::string &name, int version);
 
+    // TEMP INSTRUMENTATION (never commit): shm path as buffer identity for TID logging
+    std::string tidName_;
     bufferHeader *header_;
     T *data_;
     size_t bufferSize_;

@@ -21,13 +21,17 @@
 #include <sys/stat.h>
 #include <fcntl.h>
 #include <unistd.h>
+// TEMP INSTRUMENTATION (never commit): thread/process id proof for PR #2018 rebuttal
+#include <sys/syscall.h>
+#include <cstdio>
 
 #include "nixl_log.h"
 #include "util.h"
 
 template<typename T>
 sharedRingBuffer<T>::sharedRingBuffer(const std::string &name, bool create, int version, size_t size)
-    : header_(nullptr),
+    : tidName_(name), // TEMP INSTRUMENTATION (never commit)
+      header_(nullptr),
       data_(nullptr),
       bufferSize_(size) {
 
@@ -49,6 +53,9 @@ sharedRingBuffer<T>::~sharedRingBuffer() {
 template<typename T>
 bool
 sharedRingBuffer<T>::push(const T &item) {
+    // TEMP INSTRUMENTATION (never commit)
+    fprintf(stderr, "RINGTID push pid=%d tid=%ld file=%s ring=%p\n",
+            getpid(), (long)syscall(SYS_gettid), tidName_.c_str(), (void *)this);
     size_t write_pos = header_->write_pos.load(std::memory_order_relaxed);
     size_t next_write = (write_pos + 1) & cachedMask_;
 
@@ -70,6 +77,9 @@ sharedRingBuffer<T>::push(const T &item) {
 template<typename T>
 bool
 sharedRingBuffer<T>::pop(T &item) {
+    // TEMP INSTRUMENTATION (never commit)
+    fprintf(stderr, "RINGTID pop pid=%d tid=%ld file=%s ring=%p\n",
+            getpid(), (long)syscall(SYS_gettid), tidName_.c_str(), (void *)this);
     size_t read_pos = header_->read_pos.load(std::memory_order_relaxed);
 
     // Don't use empty(): it re-reads the producer-owned write_pos on every call.
