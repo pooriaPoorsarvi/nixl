@@ -17,6 +17,7 @@ from __future__ import annotations
 
 import pickle
 import sys
+from dataclasses import dataclass
 from enum import Enum
 from typing import TYPE_CHECKING, Optional, Union
 
@@ -1234,3 +1235,110 @@ class nixl_agent:
             Deserialized NIXL descriptor list.
         """
         return pickle.loads(serialized_descs)
+
+
+class nixl_telemetry_event_type_t(Enum):
+    """Enumeration of telemetry event types, see docs/telemetry.md."""
+
+    AGENT_TX_BYTES = nixlBind.AGENT_TX_BYTES
+    AGENT_RX_BYTES = nixlBind.AGENT_RX_BYTES
+    AGENT_TX_REQUESTS_NUM = nixlBind.AGENT_TX_REQUESTS_NUM
+    AGENT_RX_REQUESTS_NUM = nixlBind.AGENT_RX_REQUESTS_NUM
+    AGENT_MEMORY_REGISTERED = nixlBind.AGENT_MEMORY_REGISTERED
+    AGENT_MEMORY_DEREGISTERED = nixlBind.AGENT_MEMORY_DEREGISTERED
+    AGENT_XFER_TIME = nixlBind.AGENT_XFER_TIME
+    AGENT_XFER_POST_TIME = nixlBind.AGENT_XFER_POST_TIME
+    AGENT_ERR_NOT_POSTED = nixlBind.AGENT_ERR_NOT_POSTED
+    AGENT_ERR_INVALID_PARAM = nixlBind.AGENT_ERR_INVALID_PARAM
+    AGENT_ERR_BACKEND = nixlBind.AGENT_ERR_BACKEND
+    AGENT_ERR_NOT_FOUND = nixlBind.AGENT_ERR_NOT_FOUND
+    AGENT_ERR_MISMATCH = nixlBind.AGENT_ERR_MISMATCH
+    AGENT_ERR_NOT_ALLOWED = nixlBind.AGENT_ERR_NOT_ALLOWED
+    AGENT_ERR_REPOST_ACTIVE = nixlBind.AGENT_ERR_REPOST_ACTIVE
+    AGENT_ERR_UNKNOWN = nixlBind.AGENT_ERR_UNKNOWN
+    AGENT_ERR_NOT_SUPPORTED = nixlBind.AGENT_ERR_NOT_SUPPORTED
+    AGENT_ERR_REMOTE_DISCONNECT = nixlBind.AGENT_ERR_REMOTE_DISCONNECT
+    AGENT_ERR_CANCELED = nixlBind.AGENT_ERR_CANCELED
+    AGENT_ERR_NO_TELEMETRY = nixlBind.AGENT_ERR_NO_TELEMETRY
+    AGENT_TRACE_PHASES_DROPPED = nixlBind.AGENT_TRACE_PHASES_DROPPED
+    AGENT_TELEMETRY_EVENTS_DROPPED = nixlBind.AGENT_TELEMETRY_EVENTS_DROPPED
+
+    def __str__(self) -> str:
+        # the event name as defined in C++, through the binding's __str__
+        return str(self.value)
+
+
+@dataclass(frozen=True, slots=True)
+class nixl_telemetry_event:
+    """One event read from an agent's telemetry buffer."""
+
+    event_type: nixl_telemetry_event_type_t
+    value: int
+
+
+class nixl_telemetry_buffer_reader(nixlBind.nixlTelemetryBufferReader):
+    """Reader (consumer) of an agent's telemetry buffer, the file
+    NIXL_TELEMETRY_DIR/<agent name>. The reader holds a shared lock on the
+    file while it exists and releases the lock and the mapping when destroyed.
+
+    Args:
+        path: Path to the telemetry file.
+    """
+
+    def __init__(self, path: str) -> None:
+        super().__init__(path)
+
+    def pop(self) -> Optional[nixl_telemetry_event]:
+        """Pop the oldest unread event.
+
+        Returns:
+            nixl_telemetry_event, None if the buffer is empty.
+        """
+        event = super().pop()
+        if event is None:
+            return None
+        # one more copy per event, in exchange for a typed Python object instead of the bound one;
+        # unlikely to be the Python reader's bottleneck, for higher throughput use the C++ reader
+        return nixl_telemetry_event(
+            nixl_telemetry_event_type_t(event.eventType), event.value
+        )
+
+    def size(self) -> int:
+        """Get the number of unread events.
+
+        Returns:
+            Number of events in the buffer.
+        """
+        return super().size()
+
+    def empty(self) -> bool:
+        """Check if the buffer has no unread events.
+
+        Returns:
+            True if the buffer is empty.
+        """
+        return super().empty()
+
+    def full(self) -> bool:
+        """Check if the buffer has no room for another event.
+
+        Returns:
+            True if the buffer is full.
+        """
+        return super().full()
+
+    def version(self) -> int:
+        """Get the layout version of the buffer.
+
+        Returns:
+            Version number, equal to TELEMETRY_VERSION of the bindings.
+        """
+        return super().version()
+
+    def capacity(self) -> int:
+        """Get the size of the buffer.
+
+        Returns:
+            Number of events the buffer can hold.
+        """
+        return super().capacity()

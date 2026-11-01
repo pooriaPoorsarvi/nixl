@@ -22,10 +22,13 @@
 
 #include <tuple>
 #include <iostream>
+#include <optional>
 #include <span>
 
 #include "nixl.h"
 #include "serdes/serdes.h"
+#include "common/cyclic_buffer.h"
+#include "telemetry_event.h"
 
 namespace py = pybind11;
 
@@ -273,6 +276,69 @@ PYBIND11_MODULE(_bindings, m) {
         .def_readonly("totalBytes", &nixl_xfer_telem_t::totalBytes)
         .def_readonly("descCount", &nixl_xfer_telem_t::descCount);
 
+    m.attr("TELEMETRY_VERSION") = TELEMETRY_VERSION;
+
+    py::enum_<nixl_telemetry_event_type_t>(m, "nixl_telemetry_event_type_t")
+        .value("AGENT_TX_BYTES", nixl_telemetry_event_type_t::AGENT_TX_BYTES)
+        .value("AGENT_RX_BYTES", nixl_telemetry_event_type_t::AGENT_RX_BYTES)
+        .value("AGENT_TX_REQUESTS_NUM", nixl_telemetry_event_type_t::AGENT_TX_REQUESTS_NUM)
+        .value("AGENT_RX_REQUESTS_NUM", nixl_telemetry_event_type_t::AGENT_RX_REQUESTS_NUM)
+        .value("AGENT_MEMORY_REGISTERED", nixl_telemetry_event_type_t::AGENT_MEMORY_REGISTERED)
+        .value("AGENT_MEMORY_DEREGISTERED", nixl_telemetry_event_type_t::AGENT_MEMORY_DEREGISTERED)
+        .value("AGENT_XFER_TIME", nixl_telemetry_event_type_t::AGENT_XFER_TIME)
+        .value("AGENT_XFER_POST_TIME", nixl_telemetry_event_type_t::AGENT_XFER_POST_TIME)
+        .value("AGENT_ERR_NOT_POSTED", nixl_telemetry_event_type_t::AGENT_ERR_NOT_POSTED)
+        .value("AGENT_ERR_INVALID_PARAM", nixl_telemetry_event_type_t::AGENT_ERR_INVALID_PARAM)
+        .value("AGENT_ERR_BACKEND", nixl_telemetry_event_type_t::AGENT_ERR_BACKEND)
+        .value("AGENT_ERR_NOT_FOUND", nixl_telemetry_event_type_t::AGENT_ERR_NOT_FOUND)
+        .value("AGENT_ERR_MISMATCH", nixl_telemetry_event_type_t::AGENT_ERR_MISMATCH)
+        .value("AGENT_ERR_NOT_ALLOWED", nixl_telemetry_event_type_t::AGENT_ERR_NOT_ALLOWED)
+        .value("AGENT_ERR_REPOST_ACTIVE", nixl_telemetry_event_type_t::AGENT_ERR_REPOST_ACTIVE)
+        .value("AGENT_ERR_UNKNOWN", nixl_telemetry_event_type_t::AGENT_ERR_UNKNOWN)
+        .value("AGENT_ERR_NOT_SUPPORTED", nixl_telemetry_event_type_t::AGENT_ERR_NOT_SUPPORTED)
+        .value("AGENT_ERR_REMOTE_DISCONNECT",
+               nixl_telemetry_event_type_t::AGENT_ERR_REMOTE_DISCONNECT)
+        .value("AGENT_ERR_CANCELED", nixl_telemetry_event_type_t::AGENT_ERR_CANCELED)
+        .value("AGENT_ERR_NO_TELEMETRY", nixl_telemetry_event_type_t::AGENT_ERR_NO_TELEMETRY)
+        .value("AGENT_TRACE_PHASES_DROPPED",
+               nixl_telemetry_event_type_t::AGENT_TRACE_PHASES_DROPPED)
+        .value("AGENT_TELEMETRY_EVENTS_DROPPED",
+               nixl_telemetry_event_type_t::AGENT_TELEMETRY_EVENTS_DROPPED)
+        .export_values()
+        // str() gives the C++ name (agent_tx_bytes), prepended before pybind's own __str__
+        .def(
+            "__str__",
+            [](nixl_telemetry_event_type_t type) {
+                return std::string(nixlEnumStrings::telemetryEventTypeStr(type));
+            },
+            py::prepend());
+
+    py::class_<nixlTelemetryEvent>(m, "nixlTelemetryEvent")
+        .def_readonly("eventType", &nixlTelemetryEvent::eventType_)
+        .def_readonly("value", &nixlTelemetryEvent::value_);
+
+    // consumer side of an agent's telemetry ring, see docs/telemetry.md
+    py::class_<sharedRingBuffer<nixlTelemetryEvent>>(m, "nixlTelemetryBufferReader")
+        // releasing gil since opening can wait on the producer's lock while it initialises the file
+        .def(py::init([](const std::string &path) {
+                 return std::make_unique<sharedRingBuffer<nixlTelemetryEvent>>(
+                     path, false, TELEMETRY_VERSION);
+             }),
+             py::arg("path"),
+             py::call_guard<py::gil_scoped_release>())
+        .def("pop",
+             [](sharedRingBuffer<nixlTelemetryEvent> &ring) -> std::optional<nixlTelemetryEvent> {
+                 nixlTelemetryEvent event;
+                 if (!ring.pop(event)) {
+                     return std::nullopt;
+                 }
+                 return event;
+             })
+        .def("size", &sharedRingBuffer<nixlTelemetryEvent>::size)
+        .def("empty", &sharedRingBuffer<nixlTelemetryEvent>::empty)
+        .def("full", &sharedRingBuffer<nixlTelemetryEvent>::full)
+        .def("version", &sharedRingBuffer<nixlTelemetryEvent>::version)
+        .def("capacity", &sharedRingBuffer<nixlTelemetryEvent>::capacity);
 
     py::register_exception<nixlNotPostedError>(m, "nixlNotPostedError");
     py::register_exception<nixlInvalidParamError>(m, "nixlInvalidParamError");

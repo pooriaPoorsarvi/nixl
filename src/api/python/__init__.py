@@ -19,6 +19,9 @@ from ._api import (
     nixl_agent_config,
     nixl_backend_handle,
     nixl_prepped_dlist_handle,
+    nixl_telemetry_buffer_reader,
+    nixl_telemetry_event,
+    nixl_telemetry_event_type_t,
     nixl_thread_sync_t,
     nixl_xfer_handle,
 )
@@ -31,6 +34,9 @@ __all__ = [
     "nixl_agent_config",
     "nixl_backend_handle",
     "nixl_prepped_dlist_handle",
+    "nixl_telemetry_buffer_reader",
+    "nixl_telemetry_event",
+    "nixl_telemetry_event_type_t",
     "nixl_thread_sync_t",
     "nixl_xfer_handle",
 ]
