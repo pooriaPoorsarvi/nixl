@@ -13,6 +13,7 @@
 # See the License for the specific language governing permissions and
 # limitations under the License.
 
+import fcntl
 import os
 import pickle
 import shutil
@@ -173,11 +174,49 @@ def test_agent():
     agent1.invalidateRemoteMD(name2)
     # agent2.invalidateRemoteMD(name1)
 
+    # attach while the agent is alive: its destruction flushes the staged events and must
+    # leave the reader's lock and mapping intact
+    ring_path = os.path.join(telemetry_dir, name1)
+    reader = nixl.nixlTelemetryBufferReader(ring_path)
+    assert reader.version() == nixl.TELEMETRY_VERSION
+    assert reader.capacity() > 0
+    del agent1
+    tx_bytes = 0
+    for event in iter(reader.pop, None):
+        if event.eventType == nixl.AGENT_TX_BYTES:
+            tx_bytes += event.value
+    assert tx_bytes == req_size
+
+    # the reader holds a shared lock; a restarting producer probes it with LOCK_EX | LOCK_NB
+    probe = os.open(ring_path, os.O_RDONLY)
+    with pytest.raises(BlockingIOError):
+        fcntl.flock(probe, fcntl.LOCK_EX | fcntl.LOCK_NB)
+    del reader
+    fcntl.flock(probe, fcntl.LOCK_EX | fcntl.LOCK_NB)
+    os.close(probe)
+
     nixl_utils.free_passthru(addr1)
     nixl_utils.free_passthru(addr2)
 
     # Restore the no-sink default so telemetry stays inactive for later tests.
     os.environ.pop("NIXL_TELEMETRY_DIR", None)
+    shutil.rmtree(telemetry_dir, ignore_errors=True)
+
+
+def test_telemetry_reader_version_mismatch():
+    telemetry_dir = tempfile.mkdtemp(prefix="nixl-telemetry-test-")
+    path = os.path.join(telemetry_dir, "stale")
+    # the header is 512 bytes with version at byte 16 in every layout version (docs/telemetry.md)
+    header_size = 512
+    version_offset = 16
+    version = (nixl.TELEMETRY_VERSION - 1).to_bytes(4, "little")
+    with open(path, "wb") as f:
+        f.write(b"\0" * version_offset + version)
+        f.write(b"\0" * (header_size - version_offset - len(version)))
+    with pytest.raises(RuntimeError, match="Version mismatch"):
+        nixl.nixlTelemetryBufferReader(path)
+    # a reader unlinks a file it cannot use, as the C++ reader does
+    assert not os.path.exists(path)
     shutil.rmtree(telemetry_dir, ignore_errors=True)
 
 

@@ -23,7 +23,14 @@ import torch
 
 import nixl._bindings as bindings
 import nixl._utils as utils
-from nixl._api import nixl_agent, nixl_agent_config, nixl_thread_sync_t
+from nixl._api import (
+    nixl_agent,
+    nixl_agent_config,
+    nixl_telemetry_buffer_reader,
+    nixl_telemetry_event,
+    nixl_telemetry_event_type_t,
+    nixl_thread_sync_t,
+)
 
 # NIXL pytest fixtures
 
@@ -131,6 +138,14 @@ def test_sync_mode_agent(monkeypatch, sync_mode, enable_listen):
 def test_nixl_conf_bad_sync_mode():
     with pytest.raises(TypeError, match="sync_mode must be a nixl_thread_sync_t"):
         nixl_agent_config(sync_mode=1)
+
+
+def test_telemetry_event_type_mirror():
+    # the Python enum must name every value of the bound one
+    bound = bindings.nixl_telemetry_event_type_t.__members__
+    assert {m.name: m.value for m in nixl_telemetry_event_type_t} == dict(bound)
+    # the name comes from the binding
+    assert all(str(m) == str(m.value) for m in nixl_telemetry_event_type_t)
 
 
 def test_default_backend_configs_are_independent():
@@ -496,7 +511,7 @@ def test_incorrect_plugin_env(monkeypatch):
         nixl_agent("bad env agent")
 
 
-def _run_xfer_telemetry_check(agent1, agent2, expect_telemetry: bool = True) -> None:
+def _run_xfer_telemetry_check(agent1, agent2, expect_telemetry: bool = True) -> int:
     mem_size = 128
     addr1 = utils.malloc_passthru(mem_size)
     addr2 = utils.malloc_passthru(mem_size)
@@ -534,7 +549,7 @@ def _run_xfer_telemetry_check(agent1, agent2, expect_telemetry: bool = True) -> 
             with pytest.raises(bindings.nixlNoTelemetryError):
                 agent1.get_xfer_telemetry(handle)
             agent1.release_xfer_handle(handle)
-            return
+            return mem_size
 
         telem = agent1.get_xfer_telemetry(handle)
         assert telem.descCount == 2
@@ -545,6 +560,7 @@ def _run_xfer_telemetry_check(agent1, agent2, expect_telemetry: bool = True) -> 
         assert telem.xferDuration >= telem.postDuration
 
         agent1.release_xfer_handle(handle)
+        return mem_size
     finally:
         utils.free_passthru(addr1)
         utils.free_passthru(addr2)
@@ -587,7 +603,22 @@ def test_get_xfer_telemetry_with_buffer(backend_name):
             agent2 = nixl_agent(
                 str(uuid.uuid4()), nixl_conf=nixl_agent_config(backends=[backend_name])
             )
-            _run_xfer_telemetry_check(agent1, agent2)
+            xfer_size = _run_xfer_telemetry_check(agent1, agent2)
+
+            # the API reader returns nixl_telemetry_event; destroying the agent flushes
+            reader = nixl_telemetry_buffer_reader(
+                os.path.join(telemetry_dir, agent1.name)
+            )
+            del agent1
+            events = list(iter(reader.pop, None))
+            assert events
+            assert all(isinstance(e, nixl_telemetry_event) for e in events)
+            tx_bytes = sum(
+                e.value
+                for e in events
+                if e.event_type is nixl_telemetry_event_type_t.AGENT_TX_BYTES
+            )
+            assert tx_bytes == xfer_size
         finally:
             os.environ.pop("NIXL_TELEMETRY_ENABLE")
             os.environ.pop("NIXL_TELEMETRY_DIR")
