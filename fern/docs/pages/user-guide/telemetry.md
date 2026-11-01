@@ -185,18 +185,17 @@ For a complete implementation, see [`examples/python/telemetry_reader.py`](https
 <CodeBlocks>
 ```python title="Python"
 import time
-from nixl_telemetry_reader import SharedRingBuffer
+from nixl import nixl_telemetry_buffer_reader
 
 # Open the shared memory telemetry buffer
-buffer = SharedRingBuffer("/tmp/nixl_telemetry/agent_name", version=1)
-print(f"Buffer capacity: {buffer.get_capacity()} events")
+reader = nixl_telemetry_buffer_reader("/tmp/nixl_telemetry/agent_name")
+print(f"Buffer capacity: {reader.capacity()} events")
 
 # Read events in a loop
 while True:
-    event = buffer.pop()
+    event = reader.pop()
     if event:
-        name = event.event_name.decode("utf-8").rstrip("\x00")
-        print(f"[{event.timestamp_us}] {name}: {event.value}")
+        print(f"{event.event_type}: {event.value}")
     else:
         time.sleep(0.5)  # No events available, wait briefly
 ```

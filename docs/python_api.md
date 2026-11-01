@@ -12,6 +12,7 @@ The Python bindings provide access to the full NIXL API including:
 - **Transfer Operations**: Create and manage data transfers
 - **QueryMem API**: Query memory/storage information and accessibility
 - **Backend Management**: Create and configure different backends (UCX, GDS, etc.)
+- **Telemetry Buffer Reader**: Read an agent's telemetry buffer from Python
 
 ## Installation
 
@@ -61,6 +62,28 @@ For `ucx_vram_memtype_hint`:
 - Explicit accelerator hints are also supported for advanced tuning: `cuda`, `cuda-managed`, `rocm`, `ze-device`.
 - Values are case-sensitive, so `CUDA` is rejected.
 - An explicit hint fails backend creation when the UCX context does not support the requested memory type.
+
+## Telemetry buffer reader
+
+`nixl_telemetry_buffer_reader` reads the telemetry buffer an agent writes under `NIXL_TELEMETRY_DIR`
+(see [telemetry.md](telemetry.md)). It binds the C++ ring consumer, so the same code reads the
+buffer from C++ and Python. `pop()` copies out the oldest unread event and frees its slot, or
+returns `None` if the buffer is empty; the reader unmaps and unlocks the file when the object is
+destroyed.
+
+```python
+import time
+from nixl import nixl_telemetry_buffer_reader
+
+reader = nixl_telemetry_buffer_reader("/tmp/nixl_telemetry/agent_name")
+print(f"version {reader.version()}, capacity {reader.capacity()} events")
+while True:
+    event = reader.pop()
+    if event:
+        print(event.event_type, event.value)
+    else:
+        time.sleep(0.5)
+```
 
 ## Examples
 
