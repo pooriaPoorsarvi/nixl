@@ -1234,3 +1234,68 @@ class nixl_agent:
             Deserialized NIXL descriptor list.
         """
         return pickle.loads(serialized_descs)
+
+
+nixl_telemetry_event_type_t = nixlBind.nixl_telemetry_event_type_t
+
+
+# annotated pass-through; the binding itself has no type stubs yet
+class nixl_telemetry_reader(nixlBind.nixlTelemetryReader):
+    """Reader (consumer) of an agent's telemetry buffer, the file
+    NIXL_TELEMETRY_DIR/<agent name>. The reader holds a shared lock on the
+    file while it exists and releases the lock and the mapping when destroyed.
+
+    Args:
+        path: Path to the telemetry file.
+    """
+
+    def __init__(self, path: str) -> None:
+        super().__init__(path)
+
+    def pop(self) -> Optional[nixlBind.nixlTelemetryEvent]:
+        """Pop the oldest unread event.
+
+        Returns:
+            nixlTelemetryEvent object with eventType and value, None if the buffer is empty.
+        """
+        return super().pop()
+
+    def size(self) -> int:
+        """Get the number of unread events.
+
+        Returns:
+            Number of events in the buffer.
+        """
+        return super().size()
+
+    def empty(self) -> bool:
+        """Check if the buffer has no unread events.
+
+        Returns:
+            True if the buffer is empty.
+        """
+        return super().empty()
+
+    def full(self) -> bool:
+        """Check if the buffer has no room for another event.
+
+        Returns:
+            True if the buffer is full.
+        """
+        return super().full()
+
+    def version(self) -> int:
+        """Get the layout version of the buffer.
+
+        Returns:
+            Version number, equal to TELEMETRY_VERSION of the bindings.
+        """
+        return super().version()
+
+    def capacity(self) -> int:
+        """Get the size of the buffer.
+
+        Returns:
+            Number of events the buffer can hold.
+        """
+        return super().capacity()

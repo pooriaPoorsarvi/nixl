@@ -26,6 +26,8 @@ if TYPE_CHECKING:
             nixl_agent_config,
             nixl_backend_handle,
             nixl_prepped_dlist_handle,
+            nixl_telemetry_event_type_t,
+            nixl_telemetry_reader,
             nixl_thread_sync_t,
             nixl_xfer_handle,
         )
@@ -37,6 +39,8 @@ if TYPE_CHECKING:
                 nixl_agent_config,
                 nixl_backend_handle,
                 nixl_prepped_dlist_handle,
+                nixl_telemetry_event_type_t,
+                nixl_telemetry_reader,
                 nixl_thread_sync_t,
                 nixl_xfer_handle,
             )
@@ -47,6 +51,8 @@ if TYPE_CHECKING:
                 nixl_agent_config,
                 nixl_backend_handle,
                 nixl_prepped_dlist_handle,
+                nixl_telemetry_event_type_t,
+                nixl_telemetry_reader,
                 nixl_thread_sync_t,
                 nixl_xfer_handle,
             )
