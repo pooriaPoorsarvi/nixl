@@ -469,6 +469,33 @@ TEST_F(telemetryTest, TransferBytesTracking) {
     envHelper_.popVar();
 }
 
+// Events staged since the last run are flushed when the producer is destroyed
+TEST_F(telemetryTest, StagedEventsFlushedOnDestruction) {
+    // the largest interval the timer can take, so it cannot fire before the destructor
+    const auto never = std::chrono::duration_cast<std::chrono::milliseconds>(
+        std::chrono::steady_clock::duration::max());
+    envHelper_.addVar(TELEMETRY_RUN_INTERVAL_VAR, std::to_string(never.count()));
+    {
+        nixlTelemetry telemetry(testFile_, "BUFFER");
+        telemetry.updateTxBytes(1024);
+        telemetry.updateRxBytes(2048);
+    }
+
+    auto path = testDir_.string() + "/" + testFile_;
+    auto buffer =
+        std::make_unique<sharedRingBuffer<nixlTelemetryEvent>>(path, false, TELEMETRY_VERSION);
+    EXPECT_EQ(buffer->size(), 2);
+    nixlTelemetryEvent event;
+    EXPECT_TRUE(buffer->pop(event));
+    EXPECT_EQ(event.eventType_, nixl_telemetry_event_type_t::AGENT_TX_BYTES);
+    EXPECT_EQ(event.value_, 1024);
+    EXPECT_TRUE(buffer->pop(event));
+    EXPECT_EQ(event.eventType_, nixl_telemetry_event_type_t::AGENT_RX_BYTES);
+    EXPECT_EQ(event.value_, 2048);
+    EXPECT_FALSE(buffer->pop(event));
+    envHelper_.popVar();
+}
+
 // addXferStats RX branch (is_write == false): covers the AGENT_RX_BYTES /
 // AGENT_RX_REQUESTS_NUM mapping that TransferBytesTracking (write path) does not.
 TEST_F(telemetryTest, AddXferStatsRxBranch) {

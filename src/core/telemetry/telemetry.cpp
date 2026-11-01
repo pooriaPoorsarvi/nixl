@@ -145,6 +145,13 @@ nixlTelemetry::~nixlTelemetry() {
         NIXL_DEBUG << "Failed to cancel telemetry write timer: " << e.what();
         // continue anyway since it's not critical
     }
+    // the pool is joined, so this is the last flush and nothing races it
+    try {
+        flushPendingEvents();
+    }
+    catch (const std::exception &e) {
+        NIXL_DEBUG << "Failed to flush telemetry events on shutdown: " << e.what();
+    }
 }
 
 namespace {
