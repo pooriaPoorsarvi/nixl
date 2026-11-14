@@ -340,7 +340,7 @@ The C++ telemetry reader (`telemetry_reader.cpp`) provides a robust way to read 
 
 ### Python Telemetry Reader
 
-The Python telemetry reader (`telemetry_reader.py`) provides similar functionality with additional features in the reader example, through `nixl_telemetry_buffer_reader` from the `nixl` package, a binding of the C++ ring consumer, so the C++ ring code runs for Python readers too:
+The Python telemetry reader (`telemetry_reader.py`) is an example that reads and prints telemetry events. It uses `nixl_telemetry_buffer_reader`, a binding of the C++ ring consumer, so Python readers run the same ring code as C++ readers. The Python example therefore needs the `nixl` Python package installed. A minimal reader looks like this:
 
 ```python
 import time
