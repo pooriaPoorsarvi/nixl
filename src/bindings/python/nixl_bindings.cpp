@@ -20,6 +20,8 @@
 #include <pybind11/numpy.h>
 #include <pybind11/chrono.h>
 
+#include <absl/strings/ascii.h>
+
 #include <tuple>
 #include <iostream>
 #include <optional>
@@ -278,32 +280,16 @@ PYBIND11_MODULE(_bindings, m) {
 
     m.attr("TELEMETRY_VERSION") = TELEMETRY_VERSION;
 
-    py::enum_<nixl_telemetry_event_type_t>(m, "nixl_telemetry_event_type_t")
-        .value("AGENT_TX_BYTES", nixl_telemetry_event_type_t::AGENT_TX_BYTES)
-        .value("AGENT_RX_BYTES", nixl_telemetry_event_type_t::AGENT_RX_BYTES)
-        .value("AGENT_TX_REQUESTS_NUM", nixl_telemetry_event_type_t::AGENT_TX_REQUESTS_NUM)
-        .value("AGENT_RX_REQUESTS_NUM", nixl_telemetry_event_type_t::AGENT_RX_REQUESTS_NUM)
-        .value("AGENT_MEMORY_REGISTERED", nixl_telemetry_event_type_t::AGENT_MEMORY_REGISTERED)
-        .value("AGENT_MEMORY_DEREGISTERED", nixl_telemetry_event_type_t::AGENT_MEMORY_DEREGISTERED)
-        .value("AGENT_XFER_TIME", nixl_telemetry_event_type_t::AGENT_XFER_TIME)
-        .value("AGENT_XFER_POST_TIME", nixl_telemetry_event_type_t::AGENT_XFER_POST_TIME)
-        .value("AGENT_ERR_NOT_POSTED", nixl_telemetry_event_type_t::AGENT_ERR_NOT_POSTED)
-        .value("AGENT_ERR_INVALID_PARAM", nixl_telemetry_event_type_t::AGENT_ERR_INVALID_PARAM)
-        .value("AGENT_ERR_BACKEND", nixl_telemetry_event_type_t::AGENT_ERR_BACKEND)
-        .value("AGENT_ERR_NOT_FOUND", nixl_telemetry_event_type_t::AGENT_ERR_NOT_FOUND)
-        .value("AGENT_ERR_MISMATCH", nixl_telemetry_event_type_t::AGENT_ERR_MISMATCH)
-        .value("AGENT_ERR_NOT_ALLOWED", nixl_telemetry_event_type_t::AGENT_ERR_NOT_ALLOWED)
-        .value("AGENT_ERR_REPOST_ACTIVE", nixl_telemetry_event_type_t::AGENT_ERR_REPOST_ACTIVE)
-        .value("AGENT_ERR_UNKNOWN", nixl_telemetry_event_type_t::AGENT_ERR_UNKNOWN)
-        .value("AGENT_ERR_NOT_SUPPORTED", nixl_telemetry_event_type_t::AGENT_ERR_NOT_SUPPORTED)
-        .value("AGENT_ERR_REMOTE_DISCONNECT",
-               nixl_telemetry_event_type_t::AGENT_ERR_REMOTE_DISCONNECT)
-        .value("AGENT_ERR_CANCELED", nixl_telemetry_event_type_t::AGENT_ERR_CANCELED)
-        .value("AGENT_ERR_NO_TELEMETRY", nixl_telemetry_event_type_t::AGENT_ERR_NO_TELEMETRY)
-        .value("AGENT_TRACE_PHASES_DROPPED",
-               nixl_telemetry_event_type_t::AGENT_TRACE_PHASES_DROPPED)
-        .value("AGENT_TELEMETRY_EVENTS_DROPPED",
-               nixl_telemetry_event_type_t::AGENT_TELEMETRY_EVENTS_DROPPED)
+    // The members are generated from the C++ enum, so a new event type is bound without
+    // touching this file.
+    py::enum_<nixl_telemetry_event_type_t> telemetry_event_type(m, "nixl_telemetry_event_type_t");
+    for (size_t i = 0; i < nixl_telemetry_event_type_count; ++i) {
+        const auto type = static_cast<nixl_telemetry_event_type_t>(i);
+        const std::string name =
+            absl::AsciiStrToUpper(nixlEnumStrings::telemetryEventTypeStr(type));
+        telemetry_event_type.value(name.c_str(), type);
+    }
+    telemetry_event_type
         .export_values()
         // str() gives the C++ name (agent_tx_bytes), prepended before pybind's own __str__
         .def(
@@ -319,13 +305,14 @@ PYBIND11_MODULE(_bindings, m) {
 
     // consumer side of an agent's telemetry ring, see docs/telemetry.md
     py::class_<sharedRingBuffer<nixlTelemetryEvent>>(m, "nixlTelemetryBufferReader")
-        // releasing gil since opening can wait on the producer's lock while it initialises the file
         .def(py::init([](const std::string &path) {
+                 // releasing gil since opening can wait on the producer's lock while it
+                 // initialises the file
+                 py::gil_scoped_release release;
                  return std::make_unique<sharedRingBuffer<nixlTelemetryEvent>>(
                      path, false, TELEMETRY_VERSION);
              }),
-             py::arg("path"),
-             py::call_guard<py::gil_scoped_release>())
+             py::arg("path"))
         .def("pop",
              [](sharedRingBuffer<nixlTelemetryEvent> &ring) -> std::optional<nixlTelemetryEvent> {
                  nixlTelemetryEvent event;
